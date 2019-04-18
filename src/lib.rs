@@ -413,9 +413,25 @@ impl Config {
             } else {
                 using_nmake_generator = self.generator.as_ref().unwrap() == "NMake Makefiles";
             }
-            if target.contains("x86_64") && !is_ninja && !using_nmake_generator {
-                cmd.arg("-Thost=x64");
-                cmd.arg("-DCMAKE_GENERATOR_PLATFORM=x64");
+            if !is_ninja && !using_nmake_generator {
+                if target != host {
+                    cmd.arg(&format!(
+                        "-DCMAKE_MAKE_PROGRAM={}",
+                        cc::windows_registry::find_tool(&target, "msbuild")
+                            .expect("no msbuild???")
+                            .path()
+                            .display()
+                    ));
+                    //cmd.arg("-DCMAKE_C_COMPILER_ID=MSVC 14.16.27023");
+                    //cmd.arg("-DCMAKE_CXX_COMPILER_ID=MSVC 14.16.27023");
+                }
+
+                if target.contains("x86_64") {
+                    cmd.arg("-Thost=x64");
+                    cmd.arg("-DCMAKE_GENERATOR_PLATFORM=x64");
+                } else if target.contains("i686") {
+                    cmd.arg("-DCMAKE_GENERATOR_PLATFORM=Win32");
+                }
             }
         } else if target.contains("redox") {
             if !self.defined("CMAKE_SYSTEM_NAME") {
@@ -577,7 +593,9 @@ impl Config {
                 // for MinGW it doesn't really vary.
                 if !self.defined("CMAKE_TOOLCHAIN_FILE")
                     && !self.defined(&tool_var)
-                    && (env::consts::FAMILY != "windows" || (msvc && is_ninja))
+                    && (env::consts::FAMILY != "windows"
+                        || (msvc && is_ninja)
+                        || (msvc && target != host))
                 {
                     let mut ccompiler = OsString::from("-D");
                     ccompiler.push(&tool_var);
